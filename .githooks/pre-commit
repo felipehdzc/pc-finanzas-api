@@ -1,0 +1,4 @@
+#!/bin/sh
+echo "Formatting with Spotless..."
+mvn -q spotless:apply || exit 1
+git add -u          # re-añade los archivos que Spotless haya reformateado

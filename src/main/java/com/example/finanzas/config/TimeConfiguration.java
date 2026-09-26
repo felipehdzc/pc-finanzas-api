@@ -8,13 +8,13 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class TimeConfiguration {
 
-    @Bean
-    public Clock clock() {
-        return Clock.systemDefaultZone();
-    }
+  @Bean
+  public Clock clock() {
+    return Clock.systemDefaultZone();
+  }
 
-    @Bean
-    public ValidationConfigurationCustomizer validationClock(Clock clock) {
-        return configuration -> configuration.clockProvider(() -> clock);
-    }
+  @Bean
+  public ValidationConfigurationCustomizer validationClock(Clock clock) {
+    return configuration -> configuration.clockProvider(() -> clock);
+  }
 }

@@ -11,24 +11,19 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public record TransactionRequest(
-        @NotBlank(message = "El concepto es obligatorio y no puede estar vacío")
+    @NotBlank(message = "El concepto es obligatorio y no puede estar vacío")
         @Size(max = 100, message = "El concepto no puede superar los 100 caracteres")
         String concept,
-
-        @Size(max = 500, message = "La descripción no puede superar los 500 caracteres")
+    @Size(max = 500, message = "La descripción no puede superar los 500 caracteres")
         String description,
-
-        @NotNull(message = "El importe es obligatorio")
+    @NotNull(message = "El importe es obligatorio")
         @DecimalMin(value = "0", inclusive = false, message = "El importe debe ser mayor que cero")
-        @Digits(integer = 12, fraction = 2,
-                message = "El importe admite como máximo 12 dígitos enteros y 2 decimales")
+        @Digits(
+            integer = 12,
+            fraction = 2,
+            message = "El importe admite como máximo 12 dígitos enteros y 2 decimales")
         BigDecimal amount,
-
-        @NotNull(message = "El tipo es obligatorio: INCOME o EXPENSE")
-        TransactionType type,
-
-        @NotNull(message = "La fecha es obligatoria")
+    @NotNull(message = "El tipo es obligatorio: INCOME o EXPENSE") TransactionType type,
+    @NotNull(message = "La fecha es obligatoria")
         @PastOrPresent(message = "La fecha no puede ser futura")
-        LocalDate date
-) {
-}
+        LocalDate date) {}

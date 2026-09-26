@@ -40,172 +40,208 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 class GlobalExceptionHandlerTest {
 
-    private static final Instant NOW = Instant.parse("2026-09-21T10:00:00Z");
+  private static final Instant NOW = Instant.parse("2026-09-21T10:00:00Z");
 
-    private final GlobalExceptionHandler handler = new GlobalExceptionHandler(Clock.fixed(NOW, ZoneOffset.UTC));
-    private final WebRequest request = new ServletWebRequest(new MockHttpServletRequest("POST", "/api/transactions"));
+  private final GlobalExceptionHandler handler =
+      new GlobalExceptionHandler(Clock.fixed(NOW, ZoneOffset.UTC));
+  private final WebRequest request =
+      new ServletWebRequest(new MockHttpServletRequest("POST", "/api/transactions"));
 
-    @Test
-    void missingTransactionReturns404WithUniformErrorAndFixedTimestamp() {
-        TransactionNotFoundException exception = new TransactionNotFoundException(99L);
+  @Test
+  void missingTransactionReturns404WithUniformErrorAndFixedTimestamp() {
+    TransactionNotFoundException exception = new TransactionNotFoundException(99L);
 
-        ResponseEntity<Object> result = handler.handleNotFound(exception, request);
+    ResponseEntity<Object> result = handler.handleNotFound(exception, request);
 
-        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
-        assertEquals(HttpStatus.NOT_FOUND, result.getStatusCode());
-        assertEquals(NOW, error.timestamp());
-        assertEquals(404, error.status());
-        assertEquals("Not Found", error.error());
-        assertEquals(exception.getMessage(), error.message());
-        assertEquals("/api/transactions", error.path());
-        assertEquals(Map.of(), error.fieldErrors());
-    }
+    ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+    assertEquals(HttpStatus.NOT_FOUND, result.getStatusCode());
+    assertEquals(NOW, error.timestamp());
+    assertEquals(404, error.status());
+    assertEquals("Not Found", error.error());
+    assertEquals(exception.getMessage(), error.message());
+    assertEquals("/api/transactions", error.path());
+    assertEquals(Map.of(), error.fieldErrors());
+  }
 
-    @Test
-    void businessValidationReturns400AndDetailsOfInvalidFields() {
-        Map<String, String> fields = Map.of("amount", "Debe ser estrictamente positivo.");
+  @Test
+  void businessValidationReturns400AndDetailsOfInvalidFields() {
+    Map<String, String> fields = Map.of("amount", "Debe ser estrictamente positivo.");
 
-        ResponseEntity<Object> result = handler.handleBusinessValidation(new BusinessValidationException(fields), request);
+    ResponseEntity<Object> result =
+        handler.handleBusinessValidation(new BusinessValidationException(fields), request);
 
-        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
-        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
-        assertEquals(400, error.status());
-        assertEquals("El movimiento contiene datos inválidos.", error.message());
-        assertEquals(fields, error.fieldErrors());
-    }
+    assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
+    ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+    assertEquals(400, error.status());
+    assertEquals("El movimiento contiene datos inválidos.", error.message());
+    assertEquals(fields, error.fieldErrors());
+  }
 
-    @Test
-    void invertedDateRangeReturns400WithSpecificMessageAndFromDetail() {
-        String message = "La fecha 'from' no puede ser posterior a 'to'.";
-        Map<String, String> fields = Map.of("from", message);
-        BusinessValidationException exception = new BusinessValidationException(message, fields);
+  @Test
+  void invertedDateRangeReturns400WithSpecificMessageAndFromDetail() {
+    String message = "La fecha 'from' no puede ser posterior a 'to'.";
+    Map<String, String> fields = Map.of("from", message);
+    BusinessValidationException exception = new BusinessValidationException(message, fields);
 
-        ResponseEntity<Object> result = handler.handleBusinessValidation(exception, request);
+    ResponseEntity<Object> result = handler.handleBusinessValidation(exception, request);
 
-        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
-        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
-        assertEquals(400, error.status());
-        assertEquals(message, error.message());
-        assertEquals(fields, error.fieldErrors());
-    }
+    assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
+    ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+    assertEquals(400, error.status());
+    assertEquals(message, error.message());
+    assertEquals(fields, error.fieldErrors());
+  }
 
-    @Test
-    void beanValidationReturns400AndFieldErrors() throws ReflectiveOperationException {
-        TransactionRequest invalid = new TransactionRequest("", null, null, null, null);
-        BeanPropertyBindingResult binding = new BeanPropertyBindingResult(invalid, "transactionRequest");
-        binding.addError(new FieldError("transactionRequest", "concept", "El concepto es obligatorio."));
-        binding.addError(new FieldError("transactionRequest", "amount", "El importe es obligatorio."));
-        MethodParameter parameter = new MethodParameter(
-                FinancialTransactionController.class.getMethod("create", TransactionRequest.class), 0);
-        MethodArgumentNotValidException exception = new MethodArgumentNotValidException(parameter, binding);
+  @Test
+  void beanValidationReturns400AndFieldErrors() throws ReflectiveOperationException {
+    TransactionRequest invalid = new TransactionRequest("", null, null, null, null);
+    BeanPropertyBindingResult binding =
+        new BeanPropertyBindingResult(invalid, "transactionRequest");
+    binding.addError(
+        new FieldError("transactionRequest", "concept", "El concepto es obligatorio."));
+    binding.addError(new FieldError("transactionRequest", "amount", "El importe es obligatorio."));
+    MethodParameter parameter =
+        new MethodParameter(
+            FinancialTransactionController.class.getMethod("create", TransactionRequest.class), 0);
+    MethodArgumentNotValidException exception =
+        new MethodArgumentNotValidException(parameter, binding);
 
-        ResponseEntity<Object> result = handler.handleMethodArgumentNotValid(
-                exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
+    ResponseEntity<Object> result =
+        handler.handleMethodArgumentNotValid(
+            exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
 
-        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
-        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
-        assertEquals(Map.of("concept", "El concepto es obligatorio.", "amount", "El importe es obligatorio."),
-                error.fieldErrors());
-    }
+    assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
+    ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+    assertEquals(
+        Map.of("concept", "El concepto es obligatorio.", "amount", "El importe es obligatorio."),
+        error.fieldErrors());
+  }
 
-    @ParameterizedTest
-    @MethodSource("invalidJsonFields")
-    void invalidJsonValueReturns400WithTheAffectedField(String field, String json, String expectedMessage) {
-        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-        JsonMappingException cause = assertThrows(JsonMappingException.class,
-                () -> mapper.readValue(json, TransactionRequest.class));
-        HttpMessageNotReadableException exception = new HttpMessageNotReadableException(
-                "Detalles internos del deserializador", cause, new MockHttpInputMessage(new byte[0]));
+  @ParameterizedTest
+  @MethodSource("invalidJsonFields")
+  void invalidJsonValueReturns400WithTheAffectedField(
+      String field, String json, String expectedMessage) {
+    ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    JsonMappingException cause =
+        assertThrows(
+            JsonMappingException.class, () -> mapper.readValue(json, TransactionRequest.class));
+    HttpMessageNotReadableException exception =
+        new HttpMessageNotReadableException(
+            "Detalles internos del deserializador", cause, new MockHttpInputMessage(new byte[0]));
 
-        ResponseEntity<Object> result = handler.handleHttpMessageNotReadable(
-                exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
+    ResponseEntity<Object> result =
+        handler.handleHttpMessageNotReadable(
+            exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
 
-        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
-        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
-        assertEquals(Map.of(field, expectedMessage), error.fieldErrors());
-        assertFalse(error.message().contains("Detalles internos"));
-    }
+    assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
+    ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+    assertEquals(Map.of(field, expectedMessage), error.fieldErrors());
+    assertFalse(error.message().contains("Detalles internos"));
+  }
 
-    private static Stream<Arguments> invalidJsonFields() {
-        return Stream.of(
-                Arguments.of("type", "{\"type\":\"TRANSFER\"}", "Debe ser INCOME o EXPENSE."),
-                Arguments.of("date", "{\"date\":\"2026-02-30\"}", "Debe ser una fecha válida con formato yyyy-MM-dd."),
-                Arguments.of("amount", "{\"amount\":\"dinero\"}", "Debe ser un número decimal válido."));
-    }
+  private static Stream<Arguments> invalidJsonFields() {
+    return Stream.of(
+        Arguments.of("type", "{\"type\":\"TRANSFER\"}", "Debe ser INCOME o EXPENSE."),
+        Arguments.of(
+            "date",
+            "{\"date\":\"2026-02-30\"}",
+            "Debe ser una fecha válida con formato yyyy-MM-dd."),
+        Arguments.of("amount", "{\"amount\":\"dinero\"}", "Debe ser un número decimal válido."));
+  }
 
-    @Test
-    void malformedOrMissingJsonReturns400WithoutExposingParserDetails() {
-        HttpMessageNotReadableException exception = new HttpMessageNotReadableException(
-                "Detalles internos del parser", new MockHttpInputMessage(new byte[0]));
+  @Test
+  void malformedOrMissingJsonReturns400WithoutExposingParserDetails() {
+    HttpMessageNotReadableException exception =
+        new HttpMessageNotReadableException(
+            "Detalles internos del parser", new MockHttpInputMessage(new byte[0]));
 
-        ResponseEntity<Object> result = handler.handleHttpMessageNotReadable(
-                exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
+    ResponseEntity<Object> result =
+        handler.handleHttpMessageNotReadable(
+            exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
 
-        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
-        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
-        assertEquals(Map.of(), error.fieldErrors());
-        assertFalse(error.message().contains("Detalles internos"));
-    }
+    assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
+    ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+    assertEquals(Map.of(), error.fieldErrors());
+    assertFalse(error.message().contains("Detalles internos"));
+  }
 
-    @Test
-    void nonNumericIdentifierReturns400WithIdDetail() throws ReflectiveOperationException {
-        MethodParameter parameter = new MethodParameter(
-                FinancialTransactionController.class.getMethod("findById", Long.class), 0);
-        MethodArgumentTypeMismatchException exception = new MethodArgumentTypeMismatchException(
-                "abc", Long.class, "id", parameter, new NumberFormatException("abc"));
+  @Test
+  void nonNumericIdentifierReturns400WithIdDetail() throws ReflectiveOperationException {
+    MethodParameter parameter =
+        new MethodParameter(
+            FinancialTransactionController.class.getMethod("findById", Long.class), 0);
+    MethodArgumentTypeMismatchException exception =
+        new MethodArgumentTypeMismatchException(
+            "abc", Long.class, "id", parameter, new NumberFormatException("abc"));
 
-        ResponseEntity<Object> result = handler.handleTypeMismatch(
-                exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
+    ResponseEntity<Object> result =
+        handler.handleTypeMismatch(exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
 
-        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
-        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
-        assertEquals(Map.of("id", "Debe ser un número entero válido."), error.fieldErrors());
-    }
+    assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
+    ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+    assertEquals(Map.of("id", "Debe ser un número entero válido."), error.fieldErrors());
+  }
 
-    @ParameterizedTest
-    @CsvSource({"from, 0, 24-09-2026", "from, 0, 2026-02-30", "to, 1, 24-09-2026", "to, 1, 2026-02-30"})
-    void invalidDateParameterReturns400WithDateFormatDetail(String name, int parameterIndex, String invalidDate)
-            throws ReflectiveOperationException {
-        MethodParameter parameter = new MethodParameter(
-                FinancialTransactionController.class.getMethod("findAll", LocalDate.class, LocalDate.class),
-                parameterIndex);
-        MethodArgumentTypeMismatchException exception = new MethodArgumentTypeMismatchException(
-                invalidDate, LocalDate.class, name, parameter, new IllegalArgumentException("Fecha inválida"));
+  @ParameterizedTest
+  @CsvSource({
+    "from, 0, 24-09-2026",
+    "from, 0, 2026-02-30",
+    "to, 1, 24-09-2026",
+    "to, 1, 2026-02-30"
+  })
+  void invalidDateParameterReturns400WithDateFormatDetail(
+      String name, int parameterIndex, String invalidDate) throws ReflectiveOperationException {
+    MethodParameter parameter =
+        new MethodParameter(
+            FinancialTransactionController.class.getMethod(
+                "findAll", LocalDate.class, LocalDate.class),
+            parameterIndex);
+    MethodArgumentTypeMismatchException exception =
+        new MethodArgumentTypeMismatchException(
+            invalidDate,
+            LocalDate.class,
+            name,
+            parameter,
+            new IllegalArgumentException("Fecha inválida"));
 
-        ResponseEntity<Object> result = handler.handleTypeMismatch(
-                exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
+    ResponseEntity<Object> result =
+        handler.handleTypeMismatch(exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
 
-        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
-        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
-        assertEquals(400, error.status());
-        assertEquals(Map.of(name, "Debe ser una fecha válida con formato yyyy-MM-dd."), error.fieldErrors());
-        assertFalse(error.toString().contains("número entero"));
-    }
+    assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
+    ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+    assertEquals(400, error.status());
+    assertEquals(
+        Map.of(name, "Debe ser una fecha válida con formato yyyy-MM-dd."), error.fieldErrors());
+    assertFalse(error.toString().contains("número entero"));
+  }
 
-    @Test
-    void frameworkErrorsKeepUniformFormatAndProtocolHeaders() throws Exception {
-        HttpRequestMethodNotSupportedException exception =
-                new HttpRequestMethodNotSupportedException("PATCH", List.of("GET", "POST"));
+  @Test
+  void frameworkErrorsKeepUniformFormatAndProtocolHeaders() throws Exception {
+    HttpRequestMethodNotSupportedException exception =
+        new HttpRequestMethodNotSupportedException("PATCH", List.of("GET", "POST"));
 
-        ResponseEntity<Object> result = handler.handleException(exception, request);
+    ResponseEntity<Object> result = handler.handleException(exception, request);
 
-        assertEquals(HttpStatus.METHOD_NOT_ALLOWED, result.getStatusCode());
-        assertEquals(Set.of(HttpMethod.GET, HttpMethod.POST), result.getHeaders().getAllow());
-        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
-        assertEquals(405, error.status());
-        assertEquals("/api/transactions", error.path());
-    }
+    assertEquals(HttpStatus.METHOD_NOT_ALLOWED, result.getStatusCode());
+    assertEquals(Set.of(HttpMethod.GET, HttpMethod.POST), result.getHeaders().getAllow());
+    ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+    assertEquals(405, error.status());
+    assertEquals("/api/transactions", error.path());
+  }
 
-    @Test
-    void unexpectedErrorReturns500WithoutLeakingTechnicalDetails() {
-        ResponseEntity<Object> result = handler.handleUnexpected(
-                new IllegalStateException("SELECT * FROM financial_transactions: credenciales secretas"), request);
+  @Test
+  void unexpectedErrorReturns500WithoutLeakingTechnicalDetails() {
+    ResponseEntity<Object> result =
+        handler.handleUnexpected(
+            new IllegalStateException(
+                "SELECT * FROM financial_transactions: credenciales secretas"),
+            request);
 
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, result.getStatusCode());
-        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
-        assertEquals("Se ha producido un error interno.", error.message());
-        assertEquals(Map.of(), error.fieldErrors());
-        assertFalse(error.toString().contains("SELECT"));
-        assertFalse(error.toString().contains("credenciales"));
-    }
+    assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, result.getStatusCode());
+    ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+    assertEquals("Se ha producido un error interno.", error.message());
+    assertEquals(Map.of(), error.fieldErrors());
+    assertFalse(error.toString().contains("SELECT"));
+    assertFalse(error.toString().contains("credenciales"));
+  }
 }

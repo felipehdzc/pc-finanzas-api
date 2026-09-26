@@ -24,44 +24,47 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/transactions")
 public class FinancialTransactionController {
 
-    private final FinancialTransactionService service;
+  private final FinancialTransactionService service;
 
-    public FinancialTransactionController(FinancialTransactionService service) {
-        this.service = service;
-    }
+  public FinancialTransactionController(FinancialTransactionService service) {
+    this.service = service;
+  }
 
-    @PostMapping
-    public ResponseEntity<TransactionResponse> create(@Valid @RequestBody TransactionRequest request) {
-        TransactionResponse created = service.create(request);
-        return ResponseEntity.created(URI.create("/api/transactions/" + created.id())).body(created);
-    }
+  @PostMapping
+  public ResponseEntity<TransactionResponse> create(
+      @Valid @RequestBody TransactionRequest request) {
+    TransactionResponse created = service.create(request);
+    return ResponseEntity.created(URI.create("/api/transactions/" + created.id())).body(created);
+  }
 
-    @GetMapping
-    public List<TransactionResponse> findAll(
-            @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return service.findAll(from, to);
-    }
+  @GetMapping
+  public List<TransactionResponse> findAll(
+      @RequestParam(name = "from", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate from,
+      @RequestParam(name = "to", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate to) {
+    return service.findAll(from, to);
+  }
 
-    @GetMapping("/{id}")
-    public TransactionResponse findById(@PathVariable("id") Long id) {
-        return service.findById(id);
-    }
+  @GetMapping("/{id}")
+  public TransactionResponse findById(@PathVariable("id") Long id) {
+    return service.findById(id);
+  }
 
-    @PutMapping("/{id}")
-    public TransactionResponse update(@PathVariable("id") Long id,
-                                      @Valid @RequestBody TransactionRequest request) {
-        return service.update(id, request);
-    }
+  @PutMapping("/{id}")
+  public TransactionResponse update(
+      @PathVariable("id") Long id, @Valid @RequestBody TransactionRequest request) {
+    return service.update(id, request);
+  }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable("id") Long id) {
-        service.delete(id);
-        return ResponseEntity.noContent().build();
-    }
+  @DeleteMapping("/{id}")
+  public ResponseEntity<Void> delete(@PathVariable("id") Long id) {
+    service.delete(id);
+    return ResponseEntity.noContent().build();
+  }
 
-    @GetMapping("/balance")
-    public BalanceResponse getBalance() {
-        return service.getBalance();
-    }
+  @GetMapping("/balance")
+  public BalanceResponse getBalance() {
+    return service.getBalance();
+  }
 }

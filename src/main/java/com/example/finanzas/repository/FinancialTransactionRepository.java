@@ -8,9 +8,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface FinancialTransactionRepository extends JpaRepository<FinancialTransaction, Long> {
 
-    List<FinancialTransaction> findByDateBetween(LocalDate from, LocalDate to, Sort sort);
+  List<FinancialTransaction> findByDateBetween(LocalDate from, LocalDate to, Sort sort);
 
-    List<FinancialTransaction> findByDateGreaterThanEqual(LocalDate from, Sort sort);
+  List<FinancialTransaction> findByDateGreaterThanEqual(LocalDate from, Sort sort);
 
-    List<FinancialTransaction> findByDateLessThanEqual(LocalDate to, Sort sort);
+  List<FinancialTransaction> findByDateLessThanEqual(LocalDate to, Sort sort);
 }
