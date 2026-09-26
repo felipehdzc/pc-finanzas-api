@@ -2,6 +2,7 @@ package com.example.finanzas.exception;
 
 import com.fasterxml.jackson.databind.JsonMappingException;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -40,7 +41,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(BusinessValidationException.class)
     public ResponseEntity<Object> handleBusinessValidation(BusinessValidationException exception,
                                                           WebRequest request) {
-        return error(HttpStatus.BAD_REQUEST, "El movimiento contiene datos inválidos.",
+        return error(HttpStatus.BAD_REQUEST, exception.getMessage(),
                 exception.getFieldErrors(), request, HttpHeaders.EMPTY);
     }
 
@@ -81,8 +82,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     protected ResponseEntity<Object> handleTypeMismatch(TypeMismatchException exception,
                                                         HttpHeaders headers, HttpStatusCode status,
                                                         WebRequest request) {
-        Map<String, String> fields = exception instanceof MethodArgumentTypeMismatchException mismatch
-                ? Map.of(mismatch.getName(), "Debe ser un número entero válido.") : Map.of();
+        Map<String, String> fields = Map.of();
+        if (exception instanceof MethodArgumentTypeMismatchException mismatch) {
+            String message;
+            if (LocalDate.class.equals(mismatch.getRequiredType())) {
+                message = "Debe ser una fecha válida con formato yyyy-MM-dd.";
+            } else if (Long.class.equals(mismatch.getRequiredType()) || long.class.equals(mismatch.getRequiredType())) {
+                message = "Debe ser un número entero válido.";
+            } else {
+                message = "El valor no tiene el formato esperado.";
+            }
+            fields = Map.of(mismatch.getName(), message);
+        }
         return error(status, "Un parámetro de la petición tiene un formato inválido.", fields, request, headers);
     }
 

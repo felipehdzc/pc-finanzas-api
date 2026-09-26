@@ -56,17 +56,46 @@ class FinancialTransactionControllerTest {
     }
 
     @Test
-    void findAllReturnsTransactionsFromService() {
-        when(service.findAll()).thenReturn(List.of(response));
+    void findAllWithoutFiltersReturnsTransactionsFromService() {
+        when(service.findAll(null, null)).thenReturn(List.of(response));
 
-        assertEquals(List.of(response), controller.findAll());
+        assertEquals(List.of(response), controller.findAll(null, null));
+        verify(service).findAll(null, null);
+    }
+
+    @Test
+    void findAllWithBothDatesPassesTheRangeToService() {
+        LocalDate from = LocalDate.of(2026, 9, 1);
+        LocalDate to = LocalDate.of(2026, 9, 30);
+        when(service.findAll(from, to)).thenReturn(List.of(response));
+
+        assertEquals(List.of(response), controller.findAll(from, to));
+        verify(service).findAll(from, to);
+    }
+
+    @Test
+    void findAllWithOnlyFromPassesAnOpenEndedRangeToService() {
+        LocalDate from = LocalDate.of(2026, 9, 1);
+        when(service.findAll(from, null)).thenReturn(List.of(response));
+
+        assertEquals(List.of(response), controller.findAll(from, null));
+        verify(service).findAll(from, null);
+    }
+
+    @Test
+    void findAllWithOnlyToPassesAnOpenStartedRangeToService() {
+        LocalDate to = LocalDate.of(2026, 9, 30);
+        when(service.findAll(null, to)).thenReturn(List.of(response));
+
+        assertEquals(List.of(response), controller.findAll(null, to));
+        verify(service).findAll(null, to);
     }
 
     @Test
     void findAllReturnsEmptyListWhenThereAreNoTransactions() {
-        when(service.findAll()).thenReturn(List.of());
+        when(service.findAll(null, null)).thenReturn(List.of());
 
-        assertEquals(List.of(), controller.findAll());
+        assertEquals(List.of(), controller.findAll(null, null));
     }
 
     @Test

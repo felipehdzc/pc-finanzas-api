@@ -39,7 +39,28 @@ public class FinancialTransactionService {
     }
 
     public List<TransactionResponse> findAll() {
-        return repository.findAll(Sort.by("id")).stream()
+        return findAll(null, null);
+    }
+
+    public List<TransactionResponse> findAll(LocalDate from, LocalDate to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            String message = "La fecha 'from' no puede ser posterior a 'to'.";
+            throw new BusinessValidationException(message, Map.of("from", message));
+        }
+
+        Sort sort = Sort.by("id");
+        List<FinancialTransaction> transactions;
+        if (from != null && to != null) {
+            transactions = repository.findByDateBetween(from, to, sort);
+        } else if (from != null) {
+            transactions = repository.findByDateGreaterThanEqual(from, sort);
+        } else if (to != null) {
+            transactions = repository.findByDateLessThanEqual(to, sort);
+        } else {
+            transactions = repository.findAll(sort);
+        }
+
+        return transactions.stream()
                 .map(TransactionResponse::from)
                 .toList();
     }

@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -254,6 +255,140 @@ class FinancialTransactionServiceTest {
                         new BigDecimal("30.00"), TransactionType.EXPENSE, TODAY)), service.findAll());
 
         verify(repository).findAll(Sort.by("id"));
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void findAllWithNoDateBoundsReturnsAllRepositoryResults() {
+        FinancialTransaction first = transaction(
+                1L, "Ingreso", null, "80.00", TransactionType.INCOME, TODAY.minusDays(10));
+        FinancialTransaction second = transaction(
+                2L, "Compra", "Alimentos", "30.00", TransactionType.EXPENSE, TODAY);
+        when(repository.findAll(Sort.by("id"))).thenReturn(List.of(first, second));
+
+        List<TransactionResponse> response = service.findAll(null, null);
+
+        assertEquals(List.of(
+                new TransactionResponse(1L, "Ingreso", null,
+                        new BigDecimal("80.00"), TransactionType.INCOME, TODAY.minusDays(10)),
+                new TransactionResponse(2L, "Compra", "Alimentos",
+                        new BigDecimal("30.00"), TransactionType.EXPENSE, TODAY)), response);
+        verify(repository).findAll(Sort.by("id"));
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void findAllWithOnlyFromQueriesTheInclusiveLowerBound() {
+        LocalDate from = TODAY.minusDays(5);
+        FinancialTransaction atFrom = transaction(
+                3L, "Ingreso inicial", null, "120.00", TransactionType.INCOME, from);
+        FinancialTransaction afterFrom = transaction(
+                4L, "Compra posterior", "Alimentos", "22.50", TransactionType.EXPENSE, TODAY);
+        when(repository.findByDateGreaterThanEqual(from, Sort.by("id")))
+                .thenReturn(List.of(atFrom, afterFrom));
+
+        List<TransactionResponse> response = service.findAll(from, null);
+
+        assertEquals(List.of(
+                new TransactionResponse(3L, "Ingreso inicial", null,
+                        new BigDecimal("120.00"), TransactionType.INCOME, from),
+                new TransactionResponse(4L, "Compra posterior", "Alimentos",
+                        new BigDecimal("22.50"), TransactionType.EXPENSE, TODAY)), response);
+        verify(repository).findByDateGreaterThanEqual(from, Sort.by("id"));
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void findAllWithOnlyToQueriesTheInclusiveUpperBound() {
+        LocalDate to = TODAY.minusDays(5);
+        FinancialTransaction beforeTo = transaction(
+                2L, "Ingreso anterior", null, "90.00", TransactionType.INCOME, to.minusDays(3));
+        FinancialTransaction atTo = transaction(
+                5L, "Compra final", "Alimentos", "15.25", TransactionType.EXPENSE, to);
+        when(repository.findByDateLessThanEqual(to, Sort.by("id")))
+                .thenReturn(List.of(beforeTo, atTo));
+
+        List<TransactionResponse> response = service.findAll(null, to);
+
+        assertEquals(List.of(
+                new TransactionResponse(2L, "Ingreso anterior", null,
+                        new BigDecimal("90.00"), TransactionType.INCOME, to.minusDays(3)),
+                new TransactionResponse(5L, "Compra final", "Alimentos",
+                        new BigDecimal("15.25"), TransactionType.EXPENSE, to)), response);
+        verify(repository).findByDateLessThanEqual(to, Sort.by("id"));
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void findAllWithBothBoundsQueriesTheInclusiveDateRange() {
+        LocalDate from = TODAY.minusDays(10);
+        LocalDate to = TODAY.minusDays(2);
+        FinancialTransaction atFrom = transaction(
+                1L, "Ingreso inicial", null, "100.00", TransactionType.INCOME, from);
+        FinancialTransaction withinRange = transaction(
+                3L, "Compra intermedia", "Alimentos", "20.00", TransactionType.EXPENSE, from.plusDays(3));
+        FinancialTransaction atTo = transaction(
+                6L, "Ingreso final", null, "40.00", TransactionType.INCOME, to);
+        when(repository.findByDateBetween(from, to, Sort.by("id")))
+                .thenReturn(List.of(atFrom, withinRange, atTo));
+
+        List<TransactionResponse> response = service.findAll(from, to);
+
+        assertEquals(List.of(
+                new TransactionResponse(1L, "Ingreso inicial", null,
+                        new BigDecimal("100.00"), TransactionType.INCOME, from),
+                new TransactionResponse(3L, "Compra intermedia", "Alimentos",
+                        new BigDecimal("20.00"), TransactionType.EXPENSE, from.plusDays(3)),
+                new TransactionResponse(6L, "Ingreso final", null,
+                        new BigDecimal("40.00"), TransactionType.INCOME, to)), response);
+        verify(repository).findByDateBetween(from, to, Sort.by("id"));
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void findAllRejectsAnInvertedDateRangeBeforeQueryingTheRepository() {
+        LocalDate from = TODAY;
+        LocalDate to = TODAY.minusDays(1);
+        String expectedMessage = "La fecha 'from' no puede ser posterior a 'to'.";
+
+        BusinessValidationException exception = assertThrows(
+                BusinessValidationException.class, () -> service.findAll(from, to));
+
+        assertEquals(expectedMessage, exception.getMessage());
+        assertEquals(Map.of("from", expectedMessage), exception.getFieldErrors());
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void findAllWithADateRangeReturnsAnEmptyListWhenThereAreNoMatches() {
+        LocalDate from = TODAY.minusDays(7);
+        LocalDate to = TODAY.minusDays(3);
+        when(repository.findByDateBetween(from, to, Sort.by("id"))).thenReturn(List.of());
+
+        assertEquals(List.of(), service.findAll(from, to));
+
+        verify(repository).findByDateBetween(from, to, Sort.by("id"));
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void findAllAllowsEqualDateBoundsAndReturnsTransactionsOnThatDate() {
+        LocalDate date = TODAY.minusDays(2);
+        FinancialTransaction income = transaction(
+                7L, "Ingreso del día", null, "65.00", TransactionType.INCOME, date);
+        FinancialTransaction expense = transaction(
+                8L, "Compra del día", "Alimentos", "12.75", TransactionType.EXPENSE, date);
+        when(repository.findByDateBetween(date, date, Sort.by("id")))
+                .thenReturn(List.of(income, expense));
+
+        List<TransactionResponse> response = service.findAll(date, date);
+
+        assertEquals(List.of(
+                new TransactionResponse(7L, "Ingreso del día", null,
+                        new BigDecimal("65.00"), TransactionType.INCOME, date),
+                new TransactionResponse(8L, "Compra del día", "Alimentos",
+                        new BigDecimal("12.75"), TransactionType.EXPENSE, date)), response);
+        verify(repository).findByDateBetween(date, date, Sort.by("id"));
         verifyNoMoreInteractions(repository);
     }
 

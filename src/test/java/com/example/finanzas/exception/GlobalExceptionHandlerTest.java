@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpHeaders;
@@ -68,6 +70,22 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
         ApiError error = assertInstanceOf(ApiError.class, result.getBody());
         assertEquals(400, error.status());
+        assertEquals("El movimiento contiene datos inválidos.", error.message());
+        assertEquals(fields, error.fieldErrors());
+    }
+
+    @Test
+    void invertedDateRangeReturns400WithSpecificMessageAndFromDetail() {
+        String message = "La fecha 'from' no puede ser posterior a 'to'.";
+        Map<String, String> fields = Map.of("from", message);
+        BusinessValidationException exception = new BusinessValidationException(message, fields);
+
+        ResponseEntity<Object> result = handler.handleBusinessValidation(exception, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
+        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+        assertEquals(400, error.status());
+        assertEquals(message, error.message());
         assertEquals(fields, error.fieldErrors());
     }
 
@@ -142,6 +160,26 @@ class GlobalExceptionHandlerTest {
         assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
         ApiError error = assertInstanceOf(ApiError.class, result.getBody());
         assertEquals(Map.of("id", "Debe ser un número entero válido."), error.fieldErrors());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"from, 0, 24-09-2026", "from, 0, 2026-02-30", "to, 1, 24-09-2026", "to, 1, 2026-02-30"})
+    void invalidDateParameterReturns400WithDateFormatDetail(String name, int parameterIndex, String invalidDate)
+            throws ReflectiveOperationException {
+        MethodParameter parameter = new MethodParameter(
+                FinancialTransactionController.class.getMethod("findAll", LocalDate.class, LocalDate.class),
+                parameterIndex);
+        MethodArgumentTypeMismatchException exception = new MethodArgumentTypeMismatchException(
+                invalidDate, LocalDate.class, name, parameter, new IllegalArgumentException("Fecha inválida"));
+
+        ResponseEntity<Object> result = handler.handleTypeMismatch(
+                exception, HttpHeaders.EMPTY, HttpStatus.BAD_REQUEST, request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, result.getStatusCode());
+        ApiError error = assertInstanceOf(ApiError.class, result.getBody());
+        assertEquals(400, error.status());
+        assertEquals(Map.of(name, "Debe ser una fecha válida con formato yyyy-MM-dd."), error.fieldErrors());
+        assertFalse(error.toString().contains("número entero"));
     }
 
     @Test

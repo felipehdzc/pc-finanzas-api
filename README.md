@@ -90,11 +90,49 @@ campos obligatorios deben aparecer en cada actualización.
 | Método | Ruta | Respuesta satisfactoria |
 | --- | --- | --- |
 | `POST` | `/api/transactions` | `201 Created`, movimiento creado y cabecera `Location`. |
-| `GET` | `/api/transactions` | `200 OK`, lista de movimientos; `[]` si no hay ninguno. |
+| `GET` | `/api/transactions` | `200 OK`, lista de movimientos con filtros opcionales `from` y `to`; `[]` si no hay coincidencias. |
 | `GET` | `/api/transactions/{id}` | `200 OK`, movimiento solicitado. |
 | `PUT` | `/api/transactions/{id}` | `200 OK`, movimiento actualizado. |
 | `DELETE` | `/api/transactions/{id}` | `204 No Content`, sin cuerpo. |
 | `GET` | `/api/transactions/balance` | `200 OK`, totales de ingresos y gastos y balance. |
+
+### Filtrar movimientos por fecha
+
+El listado admite `from` y `to` en formato `AAAA-MM-DD`. Ambos límites son
+inclusivos y los resultados conservan el orden ascendente por identificador.
+
+| Parámetros | Movimientos devueltos |
+| --- | --- |
+| Ninguno | Todos los movimientos. |
+| Solo `from` | Fecha igual o posterior a `from`. |
+| Solo `to` | Fecha igual o anterior a `to`. |
+| `from` y `to` | Fecha comprendida entre ambos extremos, incluidos. |
+
+Si ambas fechas coinciden, se consultan los movimientos de ese día. Se pueden
+utilizar límites futuros, por ejemplo el último día del mes en curso. Si no hay
+coincidencias, se devuelve `[]` con estado `200 OK`.
+
+Un intervalo invertido devuelve `400 Bad Request` con el mensaje
+`La fecha 'from' no puede ser posterior a 'to'.` y un detalle en
+`fieldErrors.from`. Las fechas con formato inválido también devuelven `400`, con
+un detalle sobre el parámetro afectado.
+
+```bash
+# Todos los movimientos
+curl -i 'http://localhost:8080/api/transactions'
+
+# Movimientos de septiembre de 2026
+curl -i 'http://localhost:8080/api/transactions?from=2026-09-01&to=2026-09-30'
+
+# Desde el 1 de septiembre, incluido
+curl -i 'http://localhost:8080/api/transactions?from=2026-09-01'
+
+# Hasta el 30 de septiembre, incluido
+curl -i 'http://localhost:8080/api/transactions?to=2026-09-30'
+
+# Intervalo invertido: 400 Bad Request
+curl -i 'http://localhost:8080/api/transactions?from=2026-09-30&to=2026-09-01'
+```
 
 ### Ejemplos con curl
 
@@ -233,6 +271,13 @@ inexistentes al consultar, actualizar y eliminar; y los balances con ingresos,
 gastos, ausencia de movimientos y resultado negativo. Se comprueban valores,
 excepciones e interacciones con el repositorio, incluido que los datos inválidos
 no se guarden.
+
+Para los filtros de fecha, comprueban el rechazo del intervalo invertido sin
+consultar el repositorio, la selección de la consulta para cada combinación de
+parámetros, los intervalos de un solo día y las listas vacías. Al simular el
+repositorio con Mockito, estas pruebas verifican la lógica del servicio y la
+consulta solicitada; no demuestran que la consulta real filtre correctamente en
+la base de datos.
 
 `mvn test` ejecuta las pruebas, y `mvn package` las ejecuta antes de empaquetar el
 JAR. Los informes se generan en `target/surefire-reports/`.
