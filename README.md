@@ -1,4 +1,4 @@
-# Finanzas API
+# API de finanzas personales
 
 API REST para gestionar ingresos y gastos personales en euros. Proyecto Maven con
 Java 21, Spring Boot 3.5.16, Spring Data JPA/Hibernate y H2 en memoria.
